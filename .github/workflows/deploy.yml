@@ -51,6 +51,31 @@ jobs:
         run: |
           curl https://cli-assets.heroku.com/install.sh | sh
 
+      - name: Prepare Heroku app (create if needed + container stack)
+        env:
+          HEROKU_API_KEY: ${{ inputs.HEROKU_API_KEY }}
+        run: |
+          APP="${{ inputs.HEROKU_APP_NAME }}"
+          TEAM="${{ inputs.HEROKU_TEAM_NAME }}"
+          if heroku apps:info -a "$APP" >/dev/null 2>&1; then
+            echo "App '$APP' already exists."
+            CURRENT_STACK="$(heroku stack -a "$APP" | awk '$1 == "*" {print $2}')"
+            echo "Current stack: ${CURRENT_STACK:-unknown}"
+            if [ "$CURRENT_STACK" != "container" ]; then
+              echo "Switching stack to container..."
+              heroku stack:set container -a "$APP"
+            else
+              echo "Stack is already container."
+            fi
+          else
+            echo "App '$APP' not found - creating it on the container stack..."
+            CREATE_ARGS=(--stack container --region eu)
+            if [ -n "$TEAM" ]; then
+              CREATE_ARGS+=(--team "$TEAM")
+            fi
+            heroku create "$APP" "${CREATE_ARGS[@]}"
+          fi
+
       - name: Deploy Repo to Heroku
         uses: akhileshns/heroku-deploy@v3.13.15
         with:
